@@ -60,7 +60,7 @@ struct HomeView: View {
                                     spacing: 16
                                 ) {
                                     ForEach(viewModel.trendingAnime + viewModel.recentlyAdded) { anime in
-                                        AnimeCardView(anime: anime, width: .infinity, height: 160)
+                                        AnimeCardView(anime: anime, width: 110, height: 160)
                                     }
                                 }
                                 .padding(.horizontal, 16)
