@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import Combine
 
-enum PlayerState {
+enum PlayerState: Equatable {
     case idle
     case sniffing
     case loading
@@ -191,6 +191,7 @@ final class PlayerViewModel: ObservableObject {
     }
     
     deinit {
-        removeTimeObserver()
+        // Cannot call MainActor-isolated methods from deinit
+        // Time observer cleanup is handled in stopPlayback()
     }
 }

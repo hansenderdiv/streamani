@@ -37,7 +37,7 @@ struct VideoPlayerView: View {
                 playerContent
                 
             case .error(let message):
-                errorView(message: message)
+                errorView(message)
             }
         }
         .statusBarHidden(true)
