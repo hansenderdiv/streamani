@@ -1,0 +1,80 @@
+name: Build AniStream IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-unsigned-ipa:
+    name: Build Unsigned IPA
+    runs-on: macos-latest
+
+    steps:
+      # ─── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ─── 2. Select Xcode version ────────────────────────────────────────────
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      # ─── 3. Show available schemes ──────────────────────────────────────────
+      - name: List schemes
+        run: |
+          xcodebuild -list -project AniStream.xcodeproj
+
+      # ─── 4. Build & Archive (unsigned) ──────────────────────────────────────
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project AniStream.xcodeproj \
+            -scheme AniStream \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "${{ runner.temp }}/AniStream.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" \
+            | xcpretty || true
+
+      # ─── 5. Package .app → Payload → .ipa ───────────────────────────────────
+      - name: Package IPA
+        run: |
+          ARCHIVE_PATH="${{ runner.temp }}/AniStream.xcarchive"
+          IPA_DIR="${{ runner.temp }}/ipa_output"
+          PAYLOAD_DIR="$IPA_DIR/Payload"
+
+          mkdir -p "$PAYLOAD_DIR"
+
+          # Copy .app from archive
+          cp -r "$ARCHIVE_PATH/Products/Applications/AniStream.app" "$PAYLOAD_DIR/"
+
+          # Zip into IPA
+          cd "$IPA_DIR"
+          zip -r AniStream.ipa Payload/
+
+          echo "IPA created at: $IPA_DIR/AniStream.ipa"
+          ls -lh "$IPA_DIR/AniStream.ipa"
+
+      # ─── 6. Upload IPA as artifact ───────────────────────────────────────────
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AniStream-unsigned-ipa
+          path: ${{ runner.temp }}/ipa_output/AniStream.ipa
+          retention-days: 30
+
+      # ─── 7. Upload xcarchive as artifact (optional, for debugging) ───────────
+      - name: Upload xcarchive Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AniStream-xcarchive
+          path: ${{ runner.temp }}/AniStream.xcarchive
+          retention-days: 7
