@@ -31,6 +31,7 @@ jobs:
       # ─── 4. Build & Archive (unsigned) ──────────────────────────────────────
       - name: Build Archive
         run: |
+          set -o pipefail
           xcodebuild archive \
             -project AniStream.xcodeproj \
             -scheme AniStream \
@@ -42,9 +43,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             DEVELOPMENT_TEAM="" \
-            | xcpretty || true
+            ONLY_ACTIVE_ARCH=NO \
+            2>&1 | tee /tmp/xcodebuild.log
+          echo "Exit code: $?"
 
-      # ─── 5. Package .app → Payload → .ipa ───────────────────────────────────
+      # ─── 5. Debug: Show archive structure ───────────────────────────────────
+      - name: Debug Archive Structure
+        if: always()
+        run: |
+          echo "=== Archive contents ==="
+          find "${{ runner.temp }}/AniStream.xcarchive" -maxdepth 4 2>/dev/null || echo "Archive not found"
+          echo "=== Temp dir contents ==="
+          ls -la "${{ runner.temp }}/" 2>/dev/null || true
+
+      # ─── 6. Package .app → Payload → .ipa ───────────────────────────────────
       - name: Package IPA
         run: |
           ARCHIVE_PATH="${{ runner.temp }}/AniStream.xcarchive"
@@ -53,8 +65,18 @@ jobs:
 
           mkdir -p "$PAYLOAD_DIR"
 
+          # Find the .app file dynamically
+          APP_PATH=$(find "$ARCHIVE_PATH" -name "*.app" -maxdepth 5 | head -1)
+          echo "Found .app at: $APP_PATH"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found in archive!"
+            find "$ARCHIVE_PATH" -maxdepth 5 2>/dev/null
+            exit 1
+          fi
+
           # Copy .app from archive
-          cp -r "$ARCHIVE_PATH/Products/Applications/AniStream.app" "$PAYLOAD_DIR/"
+          cp -r "$APP_PATH" "$PAYLOAD_DIR/"
 
           # Zip into IPA
           cd "$IPA_DIR"
@@ -63,7 +85,7 @@ jobs:
           echo "IPA created at: $IPA_DIR/AniStream.ipa"
           ls -lh "$IPA_DIR/AniStream.ipa"
 
-      # ─── 6. Upload IPA as artifact ───────────────────────────────────────────
+      # ─── 7. Upload IPA as artifact ───────────────────────────────────────────
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -71,10 +93,20 @@ jobs:
           path: ${{ runner.temp }}/ipa_output/AniStream.ipa
           retention-days: 30
 
-      # ─── 7. Upload xcarchive as artifact (optional, for debugging) ───────────
+      # ─── 8. Upload xcarchive as artifact (optional, for debugging) ───────────
       - name: Upload xcarchive Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: AniStream-xcarchive
           path: ${{ runner.temp }}/AniStream.xcarchive
+          retention-days: 7
+
+      # ─── 9. Upload build log on failure ─────────────────────────────────────
+      - name: Upload Build Log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: /tmp/xcodebuild.log
           retention-days: 7
